@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"math/rand"
 	"os"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/ssestream"
+	"golang.org/x/term"
 )
 
 func GetEnv(name, fallback string) string {
@@ -21,8 +25,6 @@ func GetEnv(name, fallback string) string {
 }
 
 func main() {
-	println("Go!")
-
 	client := openai.NewClient(
 		option.WithBaseURL(GetEnv("OLLAMA_URL", "http://nixos.lan:11434/v1")),
 		// option.WithDebugLog(nil),
@@ -55,20 +57,70 @@ func main() {
 		},
 	}
 
-	param.Messages = append(param.Messages, openai.UserMessage("Get weather of Leipzig"))
-
-	stream := client.Chat.Completions.NewStreaming(context.TODO(), param)
-	if _, err := run(stream, &param); err != nil {
-		panic(err)
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		log.Fatal(err)
 	}
+	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
-	stream = client.Chat.Completions.NewStreaming(context.TODO(), param)
-	if _, err := run(stream, &param); err != nil {
-		panic(err)
+	t := term.NewTerminal(os.Stdin, "> ")
+
+	for {
+		prompt, err := t.ReadLine()
+		if err != nil {
+			if err != io.EOF {
+				fmt.Fprintln(t, "Fatal:", err)
+			}
+			break
+		}
+
+		if prompt == "" {
+			continue
+		}
+
+		param.Messages = append(param.Messages, openai.UserMessage(prompt))
+
+		for {
+			stream := client.Chat.Completions.NewStreaming(context.TODO(), param)
+			acc, err := run(t, stream)
+			if err != nil {
+				fmt.Fprintln(t, "Fatal:", err)
+				break
+			}
+			if err = stream.Close(); err != nil {
+				fmt.Fprintln(t, "Fatal:", err)
+				break
+			}
+
+			message := acc.Choices[0].Message
+			param.Messages = append(param.Messages, message.ToParam())
+
+			for _, toolCall := range message.ToolCalls {
+				function := toolCall.Function
+				if function.Name == "get_weather" {
+					var args map[string]string
+					json.Unmarshal([]byte(function.Arguments), &args)
+
+					temperature := 10 + rand.Intn(15)
+					SITUATION := []string{"rainy", "sunny", "cloudy"}
+					sky := SITUATION[rand.Intn(len(SITUATION))]
+					answer := fmt.Sprintf("Weather in %s: %d°C %s", args["city"], temperature, sky)
+
+					param.Messages = append(param.Messages, openai.ToolMessage(answer, toolCall.ID))
+					fmt.Fprintln(t, "Call result: ", answer)
+				}
+			}
+
+			if len(message.ToolCalls) == 0 {
+				break
+			}
+		}
+
+		fmt.Fprintln(t, "")
 	}
 }
 
-func run(stream *ssestream.Stream[openai.ChatCompletionChunk], param *openai.ChatCompletionNewParams) (openai.ChatCompletionAccumulator, error) {
+func run(w io.Writer, stream *ssestream.Stream[openai.ChatCompletionChunk]) (openai.ChatCompletionAccumulator, error) {
 	acc := openai.ChatCompletionAccumulator{}
 
 	for stream.Next() {
@@ -76,15 +128,15 @@ func run(stream *ssestream.Stream[openai.ChatCompletionChunk], param *openai.Cha
 		acc.AddChunk(chunk)
 
 		if content, ok := acc.JustFinishedContent(); ok {
-			println("Content stream finished:", content)
+			fmt.Fprintln(w, "Content stream finished:", content)
 		}
 
 		if tool, ok := acc.JustFinishedToolCall(); ok {
-			println("Tool call stream finished:", tool.Index, tool.Name, tool.Arguments)
+			fmt.Fprintln(w, "Tool call stream finished:", tool.Index, tool.Name, tool.Arguments)
 		}
 
 		if refusal, ok := acc.JustFinishedRefusal(); ok {
-			println("Refusal stream finished:", refusal)
+			fmt.Fprintln(w, "Refusal stream finished:", refusal)
 		}
 
 		if len(chunk.Choices) > 0 {
@@ -96,25 +148,12 @@ func run(stream *ssestream.Stream[openai.ChatCompletionChunk], param *openai.Cha
 				json.Unmarshal([]byte(reasoningJSON.Raw()), &reasoning)
 			}
 			if len(reasoning) > 0 {
-				print(reasoning)
+				fmt.Fprint(w, reasoning)
 			}
 
 			if len(choice.Delta.Content) > 0 {
-				print(choice.Delta.Content)
+				fmt.Fprint(w, choice.Delta.Content)
 			}
-		}
-	}
-
-	message := acc.Choices[0].Message
-	param.Messages = append(param.Messages, message.ToParam())
-
-	for _, toolCall := range message.ToolCalls {
-		function := toolCall.Function
-		if function.Name == "get_weather" {
-			var args map[string]string
-			json.Unmarshal([]byte(function.Arguments), &args)
-			answer := fmt.Sprintf("Weather in %s: 28°C sunny", args["city"])
-			param.Messages = append(param.Messages, openai.ToolMessage(answer, toolCall.ID))
 		}
 	}
 
