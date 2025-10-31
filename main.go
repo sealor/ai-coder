@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"math/rand"
@@ -26,13 +27,23 @@ func GetEnv(name, fallback string) string {
 }
 
 func main() {
-	client := openai.NewClient(
-		option.WithBaseURL(GetEnv("OLLAMA_URL", "http://nixos.lan:11434/v1")),
-		// option.WithDebugLog(nil),
-	)
+	apiURL := flag.String("api", GetEnv("OPENAI_URL", "http://127.0.0.1:11434/v1"), "URL for the OpenAI API endpoint")
+	model := flag.String("model", "qwen3:1.7b", "Technical name of the LLM")
+	activeLog := flag.Bool("log", false, "Activates logging")
+	message := flag.String("message", "", "User message")
+
+	flag.Parse()
+
+	options := []option.RequestOption{
+		option.WithBaseURL(*apiURL),
+	}
+	if *activeLog {
+		options = append(options, option.WithDebugLog(nil))
+	}
+	client := openai.NewClient(options...)
 
 	param := openai.ChatCompletionNewParams{
-		Model:           "qwen3:1.7b",
+		Model:           *model,
 		ReasoningEffort: "none",
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage("Answer using provided tools"),
@@ -66,7 +77,10 @@ func main() {
 			fmt.Fprintln(t, "Fatal:", err)
 			break
 		}
-		prompt, err := t.ReadLine()
+		prompt := *message
+		if len(*message) == 0 {
+			prompt, err = t.ReadLine()
+		}
 		restoreErr := term.Restore(int(os.Stdin.Fd()), oldState)
 
 		if err != nil {
@@ -87,6 +101,10 @@ func main() {
 		param.Messages = append(param.Messages, openai.UserMessage(prompt))
 
 		runPrompt(t, client, &param)
+
+		if len(*message) > 0 {
+			break
+		}
 	}
 }
 
