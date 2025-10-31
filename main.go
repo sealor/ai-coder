@@ -31,11 +31,30 @@ func main() {
 		Model:           "qwen3:1.7b",
 		ReasoningEffort: "none",
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("Answer in exactly one short sentence!"),
+			openai.SystemMessage("Answer using provided tools"),
+		},
+		Tools: []openai.ChatCompletionToolUnionParam{
+			{
+				OfFunction: &openai.ChatCompletionFunctionToolParam{
+					Function: openai.FunctionDefinitionParam{
+						Name:        "get_local_greeting",
+						Description: openai.String("Get greeting for locals"),
+						Parameters: openai.FunctionParameters{
+							"type": "object",
+							"properties": map[string]any{
+								"name": map[string]string{
+									"type": "string",
+								},
+							},
+							"required": []string{"name"},
+						},
+					},
+				},
+			},
 		},
 	}
 
-	param.Messages = append(param.Messages, openai.UserMessage("Say this is a test"))
+	param.Messages = append(param.Messages, openai.UserMessage("Call get_local_greeting"))
 
 	stream := client.Chat.Completions.NewStreaming(context.TODO(), param)
 
@@ -66,6 +85,11 @@ func run(stream *ssestream.Stream[openai.ChatCompletionChunk]) (openai.ChatCompl
 
 		if len(chunk.Choices) > 0 {
 			choice := chunk.Choices[0]
+
+			for _, toolCall := range choice.Delta.ToolCalls {
+				function := toolCall.Function
+				println("Call function ", function.Name, " with ", function.Arguments)
+			}
 
 			reasoningJSON, ok := choice.Delta.JSON.ExtraFields["reasoning"]
 			var reasoning string
