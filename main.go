@@ -80,44 +80,48 @@ func main() {
 
 		param.Messages = append(param.Messages, openai.UserMessage(prompt))
 
-		for {
-			stream := client.Chat.Completions.NewStreaming(context.TODO(), param)
-			acc, err := run(t, stream)
-			if err != nil {
-				fmt.Fprintln(t, "Fatal:", err)
-				break
-			}
-			if err = stream.Close(); err != nil {
-				fmt.Fprintln(t, "Fatal:", err)
-				break
-			}
+		runPrompt(t, client, &param)
+	}
+}
 
-			message := acc.Choices[0].Message
-			param.Messages = append(param.Messages, message.ToParam())
+func runPrompt(w io.Writer, client openai.Client, param *openai.ChatCompletionNewParams) {
+	for {
+		stream := client.Chat.Completions.NewStreaming(context.TODO(), *param)
+		acc, err := run(w, stream)
+		if err != nil {
+			fmt.Fprintln(w, "Fatal:", err)
+			break
+		}
+		if err = stream.Close(); err != nil {
+			fmt.Fprintln(w, "Fatal:", err)
+			break
+		}
 
-			for _, toolCall := range message.ToolCalls {
-				function := toolCall.Function
-				if function.Name == "get_weather" {
-					var args map[string]string
-					json.Unmarshal([]byte(function.Arguments), &args)
+		message := acc.Choices[0].Message
+		param.Messages = append(param.Messages, message.ToParam())
 
-					temperature := 10 + rand.Intn(15)
-					SITUATION := []string{"rainy", "sunny", "cloudy"}
-					sky := SITUATION[rand.Intn(len(SITUATION))]
-					answer := fmt.Sprintf("Weather in %s: %d°C %s", args["city"], temperature, sky)
+		for _, toolCall := range message.ToolCalls {
+			function := toolCall.Function
+			if function.Name == "get_weather" {
+				var args map[string]string
+				json.Unmarshal([]byte(function.Arguments), &args)
 
-					param.Messages = append(param.Messages, openai.ToolMessage(answer, toolCall.ID))
-					fmt.Fprintln(t, "Call result: ", answer)
-				}
-			}
+				temperature := 10 + rand.Intn(15)
+				SITUATION := []string{"rainy", "sunny", "cloudy"}
+				sky := SITUATION[rand.Intn(len(SITUATION))]
+				answer := fmt.Sprintf("Weather in %s: %d°C %s", args["city"], temperature, sky)
 
-			if len(message.ToolCalls) == 0 {
-				break
+				param.Messages = append(param.Messages, openai.ToolMessage(answer, toolCall.ID))
+				fmt.Fprintln(w, "Call result: ", answer)
 			}
 		}
 
-		fmt.Fprintln(t, "")
+		if len(message.ToolCalls) == 0 {
+			break
+		}
 	}
+
+	fmt.Fprintln(w, "")
 }
 
 func run(w io.Writer, stream *ssestream.Stream[openai.ChatCompletionChunk]) (openai.ChatCompletionAccumulator, error) {
