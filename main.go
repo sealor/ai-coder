@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -57,20 +58,25 @@ func main() {
 		},
 	}
 
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer term.Restore(int(os.Stdin.Fd()), oldState)
-
 	t := term.NewTerminal(os.Stdin, "> ")
 
 	for {
+		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+		if err != nil {
+			fmt.Fprintln(t, "Fatal:", err)
+			break
+		}
 		prompt, err := t.ReadLine()
+		restoreErr := term.Restore(int(os.Stdin.Fd()), oldState)
+
 		if err != nil {
 			if err != io.EOF {
 				fmt.Fprintln(t, "Fatal:", err)
 			}
+			break
+		}
+		if restoreErr != nil {
+			fmt.Fprintln(t, "Fatal:", restoreErr)
 			break
 		}
 
@@ -125,9 +131,19 @@ func runPrompt(w io.Writer, client openai.Client, param *openai.ChatCompletionNe
 }
 
 func run(w io.Writer, stream *ssestream.Stream[openai.ChatCompletionChunk]) (openai.ChatCompletionAccumulator, error) {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	acc := openai.ChatCompletionAccumulator{}
 
+loop:
 	for stream.Next() {
+		select {
+		case <-ctx.Done():
+			break loop
+		default:
+		}
+
 		chunk := stream.Current()
 		acc.AddChunk(chunk)
 
