@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/openai/openai-go/v3"
@@ -37,16 +38,16 @@ func main() {
 			{
 				OfFunction: &openai.ChatCompletionFunctionToolParam{
 					Function: openai.FunctionDefinitionParam{
-						Name:        "get_local_greeting",
-						Description: openai.String("Get greeting for locals"),
+						Name:        "get_weather",
+						Description: openai.String("Get local weather"),
 						Parameters: openai.FunctionParameters{
 							"type": "object",
 							"properties": map[string]any{
-								"name": map[string]string{
+								"city": map[string]string{
 									"type": "string",
 								},
 							},
-							"required": []string{"name"},
+							"required": []string{"city"},
 						},
 					},
 				},
@@ -54,17 +55,20 @@ func main() {
 		},
 	}
 
-	param.Messages = append(param.Messages, openai.UserMessage("Call get_local_greeting"))
+	param.Messages = append(param.Messages, openai.UserMessage("Get weather of Leipzig"))
 
 	stream := client.Chat.Completions.NewStreaming(context.TODO(), param)
+	if _, err := run(stream, &param); err != nil {
+		panic(err)
+	}
 
-	_, err := run(stream)
-	if err != nil {
+	stream = client.Chat.Completions.NewStreaming(context.TODO(), param)
+	if _, err := run(stream, &param); err != nil {
 		panic(err)
 	}
 }
 
-func run(stream *ssestream.Stream[openai.ChatCompletionChunk]) (openai.ChatCompletionAccumulator, error) {
+func run(stream *ssestream.Stream[openai.ChatCompletionChunk], param *openai.ChatCompletionNewParams) (openai.ChatCompletionAccumulator, error) {
 	acc := openai.ChatCompletionAccumulator{}
 
 	for stream.Next() {
@@ -86,11 +90,6 @@ func run(stream *ssestream.Stream[openai.ChatCompletionChunk]) (openai.ChatCompl
 		if len(chunk.Choices) > 0 {
 			choice := chunk.Choices[0]
 
-			for _, toolCall := range choice.Delta.ToolCalls {
-				function := toolCall.Function
-				println("Call function ", function.Name, " with ", function.Arguments)
-			}
-
 			reasoningJSON, ok := choice.Delta.JSON.ExtraFields["reasoning"]
 			var reasoning string
 			if ok {
@@ -103,6 +102,19 @@ func run(stream *ssestream.Stream[openai.ChatCompletionChunk]) (openai.ChatCompl
 			if len(choice.Delta.Content) > 0 {
 				print(choice.Delta.Content)
 			}
+		}
+	}
+
+	message := acc.Choices[0].Message
+	param.Messages = append(param.Messages, message.ToParam())
+
+	for _, toolCall := range message.ToolCalls {
+		function := toolCall.Function
+		if function.Name == "get_weather" {
+			var args map[string]string
+			json.Unmarshal([]byte(function.Arguments), &args)
+			answer := fmt.Sprintf("Weather in %s: 28°C sunny", args["city"])
+			param.Messages = append(param.Messages, openai.ToolMessage(answer, toolCall.ID))
 		}
 	}
 
