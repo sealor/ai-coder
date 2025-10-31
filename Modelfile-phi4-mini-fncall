@@ -1,0 +1,26 @@
+# see https://github.com/ollama/ollama/issues/9437
+# see https://techcommunity.microsoft.com/blog/educatordeveloperblog/building-ai-agents-on-edge-devices-using-ollama--phi-4-mini-function-calling/4391029
+#
+# ollama create phi4-mini-fncall --file Modelfile-phi4-mini-fncall
+
+FROM phi4-mini:3.8b
+TEMPLATE """{{- if or .System .Tools }}<|system|>{{ if .System }}{{ .System }}{{ end }}
+{{- if .Tools }}
+Use the tool API as a reliable and accurate data source with real-time retrieval and processing capabilities.
+When using information retrieval, list tool calls separately and stop to wait for using the results.
+Prefix every tool call with <|tool_call|>( directly followed by unformatted JSON calling properties.
+The properties must comply with the JSON schema:
+{{ range .Tools}}  * <|tool_call|>({{ .Function }})
+{{ end }}<|end|>
+{{- end }}
+{{- end }}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 -}}
+{{- if ne .Role "system" }}<|{{ .Role }}|>{{ .Content }}
+{{- if .ToolCalls }}<|tool_call|>({{ range .ToolCalls }}{{ "{" }}"name":"{{ .Function.Name }}","arguments":{{ .Function.Arguments }}{{ end }}{{ "})" }}<|/tool_call|>
+{{- end }}
+{{- if not $last }}<|end|>
+{{- end }}
+{{- if and (ne .Role "assistant") $last }}<|end|><|assistant|>{{ end }}
+{{- end }}
+{{- end }}"""
