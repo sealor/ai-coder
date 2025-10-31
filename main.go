@@ -29,7 +29,7 @@ func main() {
 
 	param := openai.ChatCompletionNewParams{
 		Model:           "qwen3:1.7b",
-		ReasoningEffort: "",
+		ReasoningEffort: "none",
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage("Answer in exactly one short sentence!"),
 		},
