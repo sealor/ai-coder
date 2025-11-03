@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,8 +13,15 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/ssestream"
+	"github.com/sealor/ai-coder/pkg/tooling"
 	"golang.org/x/term"
 )
+
+var toolFuncByName = map[string]func(openai.ChatCompletionMessageToolCallUnion) openai.ChatCompletionMessageParamUnion{
+	"read_file":       tooling.ReadFile,
+	"override_file":   tooling.OverrideFile,
+	"replace_in_file": tooling.ReplaceInFile,
+}
 
 func GetEnv(name, fallback string) string {
 	value, ok := os.LookupEnv(name)
@@ -49,23 +55,7 @@ func main() {
 			openai.SystemMessage("Answer using provided tools"),
 		},
 		Tools: []openai.ChatCompletionToolUnionParam{
-			{
-				OfFunction: &openai.ChatCompletionFunctionToolParam{
-					Function: openai.FunctionDefinitionParam{
-						Name:        "get_weather",
-						Description: openai.String("Get local weather"),
-						Parameters: openai.FunctionParameters{
-							"type": "object",
-							"properties": map[string]any{
-								"city": map[string]string{
-									"type": "string",
-								},
-							},
-							"required": []string{"city"},
-						},
-					},
-				},
-			},
+			tooling.ReadFileTool, tooling.OverrideFileTool, tooling.ReplaceInFileTool,
 		},
 	}
 
@@ -134,18 +124,14 @@ func runPrompt(w io.Writer, client openai.Client, param *openai.ChatCompletionNe
 		param.Messages = append(param.Messages, message.ToParam())
 
 		for _, toolCall := range message.ToolCalls {
-			function := toolCall.Function
-			if function.Name == "get_weather" {
-				var args map[string]string
-				json.Unmarshal([]byte(function.Arguments), &args)
-
-				temperature := 10 + rand.Intn(15)
-				SITUATION := []string{"rainy", "sunny", "cloudy"}
-				sky := SITUATION[rand.Intn(len(SITUATION))]
-				answer := fmt.Sprintf("Weather in %s: %d°C %s", args["city"], temperature, sky)
-
-				param.Messages = append(param.Messages, openai.ToolMessage(answer, toolCall.ID))
-				fmt.Fprintln(w, "Call result: ", answer)
+			toolFunc, ok := toolFuncByName[toolCall.Function.Name]
+			if ok {
+				fmt.Fprintln(w, "Tool Call:", toolCall.Function)
+				message := toolFunc(toolCall)
+				param.Messages = append(param.Messages, message)
+				fmt.Fprintln(w, "Result:", message.OfTool.Content)
+			} else {
+				fmt.Fprintln(w, "Function for Tool Call missing:", toolCall.Function)
 			}
 		}
 
