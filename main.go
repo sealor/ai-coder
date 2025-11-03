@@ -72,26 +72,35 @@ func main() {
 	t := term.NewTerminal(os.Stdin, "> ")
 
 	for {
-		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-		if err != nil {
-			fmt.Fprintln(t, "Fatal:", err)
-			break
-		}
 		prompt := *message
 		if len(*message) == 0 {
-			prompt, err = t.ReadLine()
-		}
-		restoreErr := term.Restore(int(os.Stdin.Fd()), oldState)
-
-		if err != nil {
-			if err != io.EOF {
+			fd := int(os.Stdin.Fd())
+			oldState, err := term.MakeRaw(fd)
+			if err != nil {
 				fmt.Fprintln(t, "Fatal:", err)
+				break
 			}
-			break
-		}
-		if restoreErr != nil {
-			fmt.Fprintln(t, "Fatal:", restoreErr)
-			break
+
+			width, height, err := term.GetSize(fd)
+			if err != nil {
+				fmt.Fprintln(t, "Fatal:", err)
+				break
+			}
+			t.SetSize(width, height)
+
+			prompt, err = t.ReadLine()
+			restoreErr := term.Restore(fd, oldState)
+
+			if err != nil {
+				if err != io.EOF {
+					fmt.Fprintln(t, "Fatal:", err)
+				}
+				break
+			}
+			if restoreErr != nil {
+				fmt.Fprintln(t, "Fatal:", restoreErr)
+				break
+			}
 		}
 
 		if prompt == "" {
