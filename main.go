@@ -43,6 +43,10 @@ func main() {
 	options := []option.RequestOption{
 		option.WithBaseURL(*apiURL),
 	}
+	apiKey := GetEnv("OPENAI_API_KEY", "")
+	if apiKey != "" {
+		options = append(options, option.WithAPIKey(apiKey))
+	}
 	if *activeLog {
 		options = append(options, option.WithDebugLog(nil))
 	}
