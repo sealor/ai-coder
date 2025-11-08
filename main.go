@@ -13,6 +13,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/ssestream"
+	"github.com/openai/openai-go/v3/shared"
 	"github.com/sealor/ai-coder/pkg/tooling"
 	"golang.org/x/term"
 )
@@ -35,8 +36,11 @@ func GetEnv(name, fallback string) string {
 func main() {
 	apiURL := flag.String("api", GetEnv("OPENAI_URL", "http://127.0.0.1:11434/v1"), "URL for the OpenAI API endpoint")
 	model := flag.String("model", "qwen3:1.7b", "Technical name of the LLM")
-	activeLog := flag.Bool("log", false, "Activates logging")
-	message := flag.String("message", "", "User message")
+	userMessage := flag.String("message", "", "User message")
+	systemMessage := flag.String("system", "", "System message")
+	reasoning := flag.String("reasoning", "", "Level of reasoning (e.g. none, low, medium, high)")
+	activateTools := flag.Bool("tools", false, "Activate tools")
+	activeLog := flag.Bool("log", false, "Activate logging")
 
 	flag.Parse()
 
@@ -52,22 +56,28 @@ func main() {
 	}
 	client := openai.NewClient(options...)
 
+	messages := []openai.ChatCompletionMessageParamUnion{}
+	if *systemMessage != "" {
+		messages = append(messages, openai.SystemMessage(*systemMessage))
+	}
+
+	tools := []openai.ChatCompletionToolUnionParam{}
+	if *activateTools {
+		tools = append(tools, tooling.ReadFileTool, tooling.OverrideFileTool, tooling.ReplaceInFileTool)
+	}
+
 	param := openai.ChatCompletionNewParams{
 		Model:           *model,
-		ReasoningEffort: "none",
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("Answer using provided tools"),
-		},
-		Tools: []openai.ChatCompletionToolUnionParam{
-			tooling.ReadFileTool, tooling.OverrideFileTool, tooling.ReplaceInFileTool,
-		},
+		ReasoningEffort: shared.ReasoningEffort(*reasoning),
+		Messages:        messages,
+		Tools:           tools,
 	}
 
 	t := term.NewTerminal(os.Stdin, "> ")
 
 	for {
-		prompt := *message
-		if len(*message) == 0 {
+		prompt := *userMessage
+		if len(*userMessage) == 0 {
 			fd := int(os.Stdin.Fd())
 			oldState, err := term.MakeRaw(fd)
 			if err != nil {
@@ -105,7 +115,7 @@ func main() {
 
 		runPrompt(t, client, &param)
 
-		if len(*message) > 0 {
+		if len(*userMessage) > 0 {
 			break
 		}
 	}
