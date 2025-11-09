@@ -146,7 +146,11 @@ func ReplaceInFile(toolCall openai.ChatCompletionMessageToolCallUnion) openai.Ch
 	}
 
 	text := string(buf)
-	text = strings.ReplaceAll(text, args.Pattern, args.Replacement)
+	patternCount := strings.Count(text, args.Pattern)
+	if patternCount != 1 {
+		return openai.ToolMessage(fmt.Sprintf("Error calling tool replace_in_file(): Provide a pattern which only occurs exactly once (found %d times)", patternCount), toolCall.ID)
+	}
+	text = strings.Replace(text, args.Pattern, args.Replacement, 1)
 
 	err = os.WriteFile(args.FilePath, []byte(text), 0644)
 	if err != nil {
