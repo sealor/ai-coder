@@ -145,6 +145,7 @@ func ReplaceInFile(toolCall openai.ChatCompletionMessageToolCallUnion) openai.Ch
 		return openai.ToolMessage(fmt.Sprint("Error calling tool replace_in_file():", err), toolCall.ID)
 	}
 
+	// TODO: allow only one replacement or return count of replacements
 	text := string(buf)
 	text = strings.ReplaceAll(text, args.Pattern, args.Replacement)
 
