@@ -20,6 +20,8 @@ import (
 	"golang.org/x/term"
 )
 
+// Provide exactly one recommendation for a refactoring as a comment AI!
+
 var toolFuncByName = map[string]func(openai.ChatCompletionMessageToolCallUnion) openai.ChatCompletionMessageParamUnion{
 	"read_file":       tooling.ReadFile,
 	"override_file":   tooling.OverrideFile,

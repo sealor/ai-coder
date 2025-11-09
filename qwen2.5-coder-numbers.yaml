@@ -1,0 +1,13 @@
+model: qwen2.5-coder:14b
+reasoning: ""
+messages:
+    - role: user
+      content: Read the listed numbers in "numbers.txt" and correct the file if numbers are missing
+    - role: assistant
+      content: |-
+        {
+            "name": "read_file",
+            "arguments": {
+                "file_path": "numbers.txt"
+            }
+        }

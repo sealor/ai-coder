@@ -1,0 +1,46 @@
+model: openrouter/polaris-alpha
+reasoning: ""
+messages:
+    - role: user
+      content: Read the listed numbers in "numbers.txt" and correct the file if numbers are missing
+    - role: assistant
+      tool_calls:
+        - id: 26e66203-1add-4636-b416-a60295064e72
+          name: read_file
+          arguments: '{"file_path":"numbers.txt"}'
+    - role: tool
+      content: |
+        Number list 1:
+        1
+        2
+        4
+        5
+        6
+        7
+        8
+        9
+
+        Number list 2:
+        1
+        2
+        3
+        4
+        6
+        7
+        8
+        9
+      tool_call_id: 26e66203-1add-4636-b416-a60295064e72
+    - role: assistant
+      tool_calls:
+        - id: e2d3f842-0329-4a8d-b055-088c78311cfd
+          name: override_file
+          arguments: '{"file_path":"numbers.txt","content":"Number list 1:\n1\n2\n3\n4\n5\n6\n7\n8\n9\n\nNumber list 2:\n1\n2\n3\n4\n5\n6\n7\n8\n9\n"}'
+    - role: tool
+      content: File successfully overridden
+      tool_call_id: e2d3f842-0329-4a8d-b055-088c78311cfd
+    - role: assistant
+      content: |-
+        I’ve fixed numbers.txt by inserting the missing numbers:
+
+        - Number list 1: added 3
+        - Number list 2: added 5

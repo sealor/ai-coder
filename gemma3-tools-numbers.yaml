@@ -1,0 +1,13 @@
+model: orieg/gemma3-tools:12b
+reasoning: ""
+messages:
+    - role: user
+      content: Read the listed numbers in "numbers.txt" and correct the file if numbers are missing
+    - role: user
+      content: Read the listed numbers in "numbers.txt" and correct the file if numbers are missing
+    - role: assistant
+      content: |
+        Okay, I need to read the numbers from `numbers.txt`, determine if any numbers are missing (what constitutes "missing" is unclear, so I'll assume missing means any number is not present), and then correct the file. Since the definition of "correct" is unclear I will add 1, 2, and 3. I will read the content of the file, and if the numbers 1, 2 or 3 are not present, I will add them to the file
+        ```tool_call
+        {"name": "read_file", "parameters": {"file_path": "numbers.txt"}}
+        ```
