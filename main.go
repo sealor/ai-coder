@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +15,7 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/openai/openai-go/v3/shared"
+	"github.com/sealor/ai-coder/pkg/persistence"
 	"github.com/sealor/ai-coder/pkg/tooling"
 	"golang.org/x/term"
 )
@@ -39,6 +41,7 @@ func main() {
 	userMessage := flag.String("message", "", "User message")
 	systemMessage := flag.String("system", "", "System message")
 	reasoning := flag.String("reasoning", "", "Level of reasoning (e.g. none, low, medium, high)")
+	sessionFile := flag.String("session-file", "", "Use this file to save and resume chat sessions")
 	activateTools := flag.Bool("tools", false, "Activate tools")
 	activeLog := flag.Bool("log", false, "Activate logging")
 
@@ -56,21 +59,31 @@ func main() {
 	}
 	client := openai.NewClient(options...)
 
-	messages := []openai.ChatCompletionMessageParamUnion{}
+	param := openai.ChatCompletionNewParams{}
+	if *sessionFile != "" {
+		var err error
+		param, err = persistence.TryToResumeSession(*sessionFile)
+		if err != nil {
+			log.Fatalln("ERROR:", err)
+		}
+	}
+
+	if *model != "" {
+		param.Model = *model
+	}
+
+	if *reasoning != "" {
+		param.ReasoningEffort = shared.ReasoningEffort(*reasoning)
+	}
+
 	if *systemMessage != "" {
-		messages = append(messages, openai.SystemMessage(*systemMessage))
+		param.Messages = append(param.Messages, openai.SystemMessage(*systemMessage))
 	}
 
-	tools := []openai.ChatCompletionToolUnionParam{}
 	if *activateTools {
-		tools = append(tools, tooling.ReadFileTool, tooling.OverrideFileTool, tooling.ReplaceInFileTool)
-	}
-
-	param := openai.ChatCompletionNewParams{
-		Model:           *model,
-		ReasoningEffort: shared.ReasoningEffort(*reasoning),
-		Messages:        messages,
-		Tools:           tools,
+		param.Tools = []openai.ChatCompletionToolUnionParam{
+			tooling.ReadFileTool, tooling.OverrideFileTool, tooling.ReplaceInFileTool,
+		}
 	}
 
 	t := term.NewTerminal(os.Stdin, "> ")
@@ -114,6 +127,12 @@ func main() {
 		param.Messages = append(param.Messages, openai.UserMessage(prompt))
 
 		runPrompt(t, client, &param)
+
+		if *sessionFile != "" {
+			if err := persistence.SaveSession(*sessionFile, &param); err != nil {
+				log.Fatalln("ERROR:", err)
+			}
+		}
 
 		if len(*userMessage) > 0 {
 			break
