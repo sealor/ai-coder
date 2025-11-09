@@ -6,6 +6,8 @@ require github.com/openai/openai-go/v3 v3.7.0
 
 require golang.org/x/term v0.36.0
 
+require gopkg.in/yaml.v3 v3.0.1
+
 require (
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
