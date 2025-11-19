@@ -20,6 +20,18 @@ import (
 	"golang.org/x/term"
 )
 
+// TODO: Consider the following improvements for this code:
+// 1. Add proper error handling with structured error types
+// 2. Implement context cancellation throughout the call chain
+// 3. Add input validation for flags and parameters
+// 4. Consider using a configuration struct instead of individual variables
+// 5. Add rate limiting and retry logic for API calls
+// 6. Implement proper logging with different levels instead of fmt.Fprintln
+// 7. Add unit tests for the GetEnv function and main logic
+// 8. Consider using a more robust terminal handling library
+// 9. Add graceful shutdown handling
+// 10. Implement better session management with error recovery
+
 var toolFuncByName = map[string]func(openai.ChatCompletionMessageToolCallUnion) openai.ChatCompletionMessageParamUnion{
 	"read_file":       tooling.ReadFile,
 	"override_file":   tooling.OverrideFile,
